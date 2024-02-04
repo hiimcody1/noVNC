@@ -915,7 +915,7 @@
                 this._sock.rQskipBytes(4);
             }
 
-            this._sock.rQskipBytes(16);
+            this._sock.rQskipBytes(20);
 
             var username = aten_auth[0];
             username += new Array(24 - username.length+1).join("\x00");
@@ -1254,10 +1254,6 @@
             //
             // Thanks to Brian Rak and Erik Smit for testing
             if (this._rfb_atenikvm) {
-                // we do not know the resolution till the first fbupdate so go large
-                // although, not necessary, saves a pointless full screen refresh
-                this._fb_width                = 10000;
-                this._fb_height               = 10000;
 
                 // TODO(kelleyk): This message (and this block of code) is part
                 // of the original ATEN "HERMON" (0x59) support.  The "AST2100"
@@ -1731,7 +1727,7 @@
             var bgr = new Array(3);
 
             var redMult = 256/(this._pixelFormat.red_max + 1);
-            var greenMult = 256/(this._pixelFormat.red_max + 1);
+            var greenMult = 256/(this._pixelFormat.green_max + 1);
             var blueMult = 256/(this._pixelFormat.blue_max + 1);
 
             var pix = 0;
@@ -1768,7 +1764,7 @@
             }
 
             var redMult = 256/(this._pixelFormat.red_max + 1);
-            var greenMult = 256/(this._pixelFormat.red_max + 1);
+            var greenMult = 256/(this._pixelFormat.green_max + 1);
             var blueMult = 256/(this._pixelFormat.blue_max + 1);
 
             for (var i = 0, j = 0; i < in_arr.length; i += Bpp, j += 4) {
@@ -2755,6 +2751,8 @@
             this._destBuff = new Uint8Array(this._fb_width * this._fb_height * 4);
             this._display.resize(this._fb_width, this._fb_height);
             this._onFBResize(this, this._fb_width, this._fb_height);
+            //Force it to refresh the entire screen
+            this._sock.send([0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfd, 0x80, 0xfe, 0x20]);
             this._timing.fbu_rt_start = (new Date()).getTime();
             this._updateContinuousUpdates();
 
@@ -2886,16 +2884,22 @@
                         Util.Debug(">> ATEN iKVM screen off (aten_len="+this._FBU.aten_len+")");
                         this._fail('expected aten_len to be 10 when screen is off');
                     }
-                    this._FBU.aten_len = 0;
-                    return true;
+                    this._FBU.rects--;
+                    this._FBU.aten_len = -1;
+                    this._FBU.bytes = 0;
+                    
+                    //Force it to refresh the entire screen
+                    this._sock.send([0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfd, 0x80, 0xfe, 0x20]);
                 }
-                if (this._fb_width !== this._FBU.width && this._fb_height !== this._FBU.height) {
-                    Util.Debug(">> ATEN_HERMON resize desktop");
-                    this._fb_width = this._FBU.width;
-                    this._fb_height = this._FBU.height;
-                    this._onFBResize(this, this._fb_width, this._fb_height);
-                    this._display.resize(this._fb_width, this._fb_height);
-                    Util.Debug("<< ATEN_HERMON resize desktop");
+                if (this._fb_width !== this._FBU.width || this._fb_height !== this._FBU.height) {
+                    if (this._FBU.width !== 64896 && this._FBU.height !== 65056) {
+                        Util.Debug(">> ATEN_HERMON resize desktop");
+                        this._fb_width = this._FBU.width;
+                        this._fb_height = this._FBU.height;
+                        this._onFBResize(this, this._fb_width, this._fb_height);
+                        this._display.resize(this._fb_width, this._fb_height);
+                        Util.Debug("<< ATEN_HERMON resize desktop");
+                    }
                 }
             }
 
